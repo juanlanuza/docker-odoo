@@ -1,0 +1,68 @@
+version: '3.1'
+networks:
+  traefik-proxy:
+    external: true
+  # proxy:
+  #   external: true
+  internal:
+    external: false
+services:
+  odooweb:
+    #image: odoo:15.0
+    #image: lobodoo:15.0
+    build: .
+    #container_name: odooweb8
+    restart: unless-stopped
+    depends_on:
+      - db
+    ports:
+     # - "8069:8069"
+     # - "8070:8069"
+     # - "8093:8069"
+    volumes:
+      #- /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./odoo-web-data:/var/lib/odoo
+      - ./config:/etc/odoo
+      - ./addons:/mnt/extra-addons
+    environment:
+      - PASSWORD_FILE=/run/secrets/postgresql_password
+    secrets:
+      - postgresql_password
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-proxy"
+      - "traefik.http.routers.odoo1.entrypoints=http"
+      - "traefik.http.routers.odoo1.rule=Host(`test4.jungle.business`)"
+      - "traefik.http.middlewares.odoo1-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.odoo1.middlewares=odoo1-https-redirect"
+      - "traefik.http.routers.odoo1-secure.entrypoints=https"
+      # El siguiente es para probarlo a ver si funciona activándolo o para ver si es sustituto de http y https
+      #- "traefik.http.routers.odoo1-secure.entrypoints=websecure"
+      - "traefik.http.routers.odoo1-secure.rule=Host(`test4.jungle.business`)"
+      # Entiendo que este va en sustitución del anterior, pero no estoy seguro de la utilidad que tiene
+      #- "traefik.http.routers.odoo1-secure.rule=Host(`test4.jungle.business`) #&&PathPrefix(`/odoo`)"
+      - "traefik.http.routers.odoo1-secure.tls=true"
+      - "traefik.http.routers.odoo1-secure.tls.certresolver=http"
+      - "traefik.http.routers.odoo1-secure.service=odoo1"
+      # Lo siguiente activa un login base como el de traefik al conectar a la web
+      #- traefik.http.routers.odoo1-secure.middlewares=user-auth@file
+      - "traefik.http.services.odoo1.loadbalancer.server.port=8069"
+    networks:
+      - internal
+      - traefik-proxy
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgresql_password
+      - POSTGRES_USER=odoo
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - ./odoo-db-data:/var/lib/postgresql/data/pgdata
+    networks:
+      - internal
+    secrets:
+      - postgresql_password
+secrets:
+  postgresql_password:
+    file: odoo_pg_pass
